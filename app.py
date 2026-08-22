@@ -81,14 +81,14 @@ with st.form("input_form"):
 
   with col3:
     al2o3 = st.number_input(
-        "Al2O3 Fraction",
+        "Al2O3",
         min_value=0.0,
         max_value=1.0,
         value=0.15,
         step=0.01,
     )
     sio2 = st.number_input(
-        "SiO2 Fraction",
+        "SiO2",
         min_value=0.0,
         max_value=1.0,
         value=0.45,
@@ -97,7 +97,7 @@ with st.form("input_form"):
 
   with col4:
     so3 = st.number_input(
-        "SO3 Fraction",
+        "SO3",
         min_value=0.0,
         max_value=1.0,
         value=0.03,
@@ -105,7 +105,7 @@ with st.form("input_form"):
         format="%.3f",
     )
     cao = st.number_input(
-        "CaO Fraction",
+        "CaO",
         min_value=0.01,
         max_value=1.0,
         value=0.10,
