@@ -25,7 +25,7 @@ model, baseline_data, feature_names = load_assets()
 
 # Form Input Pengguna
 with st.form("input_form"):
-  st.subheader("1. Proporsi Material & Umur")
+  st.subheader("1. Materials proportion & Age")
   col1, col2 = st.columns(2)
 
   with col1:
@@ -53,14 +53,14 @@ with st.form("input_form"):
 
   with col2:
     age = st.number_input(
-        "Age (Hari)",
+        "Age (days)",
         min_value=1,
         max_value=365,
         value=28,
         step=1,
     )
     fiber = st.number_input(
-        "Fiber",
+        "Fiber by binders",
         min_value=0.0,
         max_value=1.0,
         value=0.01,
@@ -68,7 +68,7 @@ with st.form("input_form"):
         format="%.3f",
     )
     sp = st.number_input(
-        "Superplasticizer (SP)",
+        "Superplasticizer (SP) by binders",
         min_value=0.0,
         max_value=1.0,
         value=0.02,
@@ -76,7 +76,7 @@ with st.form("input_form"):
         format="%.3f",
     )
 
-  st.subheader("Chemichal Ratio( 0.0 - 1.0)")
+  st.subheader("2. Chemichal Ratio( 0.0 - 1.0)")
   col3, col4 = st.columns(2)
 
   with col3:
