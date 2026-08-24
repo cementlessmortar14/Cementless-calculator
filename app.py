@@ -76,7 +76,7 @@ with st.form("input_form"):
         format="%.3f",
     )
 
-  st.subheader("2. Chemichal Ratio( 0.0 - 1.0)")
+  st.subheader("2. Chemichal Ratio")
   col3, col4 = st.columns(2)
 
   with col3:
