@@ -7,7 +7,6 @@ import streamlit as st
 st.set_page_config(page_title="Cementless Strength Calculator", layout="centered")
 
 st.title("Cementless Strength Predictor")
-st.caption("Please input all parameters as ratios (0.00 – 1.00) unless specified otherwise.")
 
 
 # Load model dan metadata dengan cache
@@ -28,7 +27,7 @@ with st.form("input_form"):
 
     with col1:
         wbr = st.number_input(
-            "Water-to-Binder Ratio (WBR)",
+            "Water Binder Ratio (w/b)",
             min_value=0.01,
             max_value=1.00,
             value=0.40,
@@ -36,7 +35,7 @@ with st.form("input_form"):
             format="%.2f",
         )
         fa = st.number_input(
-            "Fly Ash (FA) Ratio",
+            "Fly Ash (FA)",
             min_value=0.00,
             max_value=1.00,
             value=0.30,
@@ -82,7 +81,7 @@ with st.form("input_form"):
 
     with col3:
         al2o3 = st.number_input(
-            "Al2O3 Ratio",
+            "Al2O3",
             min_value=0.00,
             max_value=1.00,
             value=0.15,
@@ -100,7 +99,7 @@ with st.form("input_form"):
 
     with col4:
         so3 = st.number_input(
-            "SO3 Ratio",
+            "SO3",
             min_value=0.000,
             max_value=1.000,
             value=0.030,
@@ -108,7 +107,7 @@ with st.form("input_form"):
             format="%.3f",
         )
         cao = st.number_input(
-            "CaO Ratio",
+            "CaO",
             min_value=0.01,
             max_value=1.00,
             value=0.10,
