@@ -125,7 +125,7 @@ with st.form("prediction_form"):
     col1, col2 = st.columns(2)
 
     with col1:
-        wbr   = st.number_input("WBR (w/b):", value=0.50, step=0.01, format="%.2f")
+        wbr   = st.number_input("WBR - w/b (ratio by total binders (0-1)):", value=0.50, step=0.01, format="%.2f")
         ggbs  = st.number_input("GGBS (fraction by total binders (0-1)):", value=0.60, step=0.05, format="%.2f")
         fa    = st.number_input("Fly Ash - FA (fraction by total binders (0-1)):", value=0.10, step=0.05, format="%.2f")
         cfa   = st.number_input("Co-fired FA - CFA (fraction by total binders (0-1)):", value=0.30, step=0.05, format="%.2f")
