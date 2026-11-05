@@ -118,7 +118,7 @@ except FileNotFoundError as e:
 
 # --- Antarmuka Utama (UI) ---
 st.title("Mortar Strength Calculator")
-st.caption("Random Forest + Strict SHAP Rule Enforcement")
+st.caption(" ")
 
 with st.form("prediction_form"):
     st.subheader("Mix Proportions & Oxide Composition")
