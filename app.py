@@ -204,10 +204,6 @@ if submitted:
             value=f"{final_pred:.2f} MPa",
             delta=f"{final_pred - raw_rf_pred:+.2f} MPa SHAP Calibration",
         )
-        m_col2.metric(
-            label="Base RF Model Output",
-            value=f"{raw_rf_pred:.2f} MPa",
-        )
 
         if is_critical:
             st.error(
