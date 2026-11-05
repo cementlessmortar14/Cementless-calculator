@@ -192,7 +192,7 @@ if submitted:
 
         # 6. Prediksi RF & terapkan aturan ketat SHAP
         raw_rf_pred = float(model.predict(df_input)[0])
-        final_pred, shap_advisory_text, is_critical = enforce_strict_shap_rules(
+        final_pred, shap_advisory_text, is_critical = enforce_shap_rules(
             raw_rf_pred, input_data, baseline
         )
 
