@@ -10,10 +10,6 @@ st.set_page_config(
     layout="centered",
 )
 
-# Lokasi folder tempat menyimpan file .pkl (mendukung path lokal & direktori aktif)
-LOCAL_FOLDER = r"C:\Users\a0338\Desktop\ML-Mortar"
-FOLDER_PATH = LOCAL_FOLDER if os.path.exists(LOCAL_FOLDER) else os.path.dirname(os.path.abspath(__file__))
-
 # Bobot Mean |SHAP| resmi sesuai grafik SHAP Feature Importance
 SHAP_WEIGHTS = {
     "WBR": 4.84,
