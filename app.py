@@ -141,7 +141,7 @@ with st.form("prediction_form"):
         cao   = st.number_input("CaO (%):", value=45.74, step=0.10, format="%.2f")
 
     submitted = st.form_submit_button(
-        "Calculate Strength (Enforce SHAP Rules)",
+        "Calculate Strength",
         type="primary",
         use_container_width=True,
     )
