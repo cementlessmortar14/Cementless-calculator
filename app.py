@@ -198,8 +198,7 @@ if submitted:
 
         # 7. Tampilkan Hasil & Kotak Advisory SHAP
         st.divider()
-        m_col1, m_col2 = st.columns(2)
-        m_col1.metric(
+        st.metric(
             label="Predicted Strength",
             value=f"{final_pred:.2f} MPa",
             delta=f"{final_pred - raw_rf_pred:+.2f} MPa SHAP Calibration",
