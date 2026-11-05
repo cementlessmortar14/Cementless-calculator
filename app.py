@@ -40,7 +40,7 @@ def load_artifacts(folder):
     return loaded_model, loaded_baseline, loaded_features
 
 
-def enforce_strict_shap_rules(raw_pred, inp, base):
+def enforce__shap_rules(raw_pred, inp, base):
     """
     Menegakkan aturan arah & bobot SHAP secara ketat pada prediksi Random Forest
     serta menghasilkan laporan audit kepatuhan SHAP (SHAP Advisory Log).
@@ -87,7 +87,7 @@ def enforce_strict_shap_rules(raw_pred, inp, base):
 
     # 3. Susun Audit Arah Fitur Utama Sesuai Aturan SHAP Beeswarm Plot
     advisory_lines = [
-        f"[✓] STRICT SHAP COMPLIANCE VERIFIED ({regime_note})",
+        f"[✓] SHAP COMPLIANCE VERIFIED ({regime_note})",
         "-" * 68,
         f"1. WBR ({wbr:.2f}) [SHAP Wt: 4.84]            -> {'[+] Boost (Low WBR)' if wbr < base['WBR'] else '[-] Penalty (High WBR)'}",
         f"2. FA ({fa:.2f}) [SHAP Wt: 3.72]             -> {'[+] Boost (Low FA <= 0.10)' if fa <= base['FA'] else '[-] Penalty (High FA Dilution)'}",
@@ -200,7 +200,7 @@ if submitted:
         st.divider()
         m_col1, m_col2 = st.columns(2)
         m_col1.metric(
-            label="Predicted Strength (RF + Strict SHAP)",
+            label="Predicted Strength (RF + SHAP)",
             value=f"{final_pred:.2f} MPa",
             delta=f"{final_pred - raw_rf_pred:+.2f} MPa SHAP Calibration",
         )
@@ -211,16 +211,16 @@ if submitted:
 
         if is_critical:
             st.error(
-                f"**Predicted Strength (RF + Strict SHAP): {final_pred:.2f} MPa**  \n"
-                f"⚠️ `[Strict SHAP Alert: Critical Stoichiometric Zone]`"
+                f"**Predicted Strength (RF + SHAP): {final_pred:.2f} MPa**  \n"
+                f"⚠️ `[SHAP Alert: Critical Stoichiometric Zone]`"
             )
         else:
             st.success(
-                f"**Predicted Strength (RF + Strict SHAP): {final_pred:.2f} MPa**  \n"
-                f"✅ `[✓ Strictly Verified by SHAP Rules]`"
+                f"**Predicted Strength (RF + SHAP): {final_pred:.2f} MPa**  \n"
+                f"✅ `[✓ Verified by SHAP Rules]`"
             )
 
-        st.markdown("**Strict SHAP Rule Compliance & Feature Impact Audit:**")
+        st.markdown("**SHAP Rule Compliance & Feature Impact Audit:**")
         st.code(shap_advisory_text, language="text")
 
     except KeyError as e:
