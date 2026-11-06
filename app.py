@@ -125,19 +125,19 @@ with st.form("prediction_form"):
     col1, col2 = st.columns(2)
 
     with col1:
-        wbr   = st.number_input("WBR - w/b (ratio by total binders (0-1)):", value=0.50, step=0.01, format="%.2f")
         ggbs  = st.number_input("GGBS (fraction by total binders (0-1)):", value=0.60, step=0.05, format="%.2f")
         fa    = st.number_input("Fly Ash - FA (fraction by total binders (0-1)):", value=0.10, step=0.05, format="%.2f")
         cfa   = st.number_input("Co-fired FA - CFA (fraction by total binders (0-1)):", value=0.30, step=0.05, format="%.2f")
         sf    = st.number_input("Silica Fume - SF (fraction by total binders (0-1)):", value=0.00, step=0.01, format="%.2f")
+        wbr   = st.number_input("WBR - w/b (ratio by total binders (0-1)):", value=0.50, step=0.01, format="%.2f")
+        fiber = st.number_input("Fiber (ratio by total binders (0-1)):", value=0.000, step=0.005, format="%.3f")
+        sp    = st.number_input("Superplasticizer - SP (ratio by total binders (0-1)):", value=0.010, step=0.005, format="%.3f")
         age   = st.number_input("Age (Days):", value=28.0, step=1.0, format="%.0f")
 
     with col2:
         al2o3 = st.number_input("Al2O3 (%):", value=18.09, step=0.10, format="%.2f")
-        fiber = st.number_input("Fiber (ratio by total binders (0-1)):", value=0.000, step=0.005, format="%.3f")
-        sp    = st.number_input("Superplasticizer - SP (ratio by total binders (0-1)):", value=0.010, step=0.005, format="%.3f")
-        sio2  = st.number_input("SiO2 (%):", value=23.77, step=0.10, format="%.2f")
         so3   = st.number_input("SO3 (%):", value=3.74, step=0.10, format="%.2f")
+        sio2  = st.number_input("SiO2 (%):", value=23.77, step=0.10, format="%.2f")
         cao   = st.number_input("CaO (%):", value=45.74, step=0.10, format="%.2f")
 
     submitted = st.form_submit_button(
