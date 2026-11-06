@@ -117,7 +117,7 @@ except FileNotFoundError as e:
     st.stop()
 
 # --- Antarmuka Utama (UI) ---
-st.title("Mortar Strength Calculator")
+st.title("CEMENTLESS MORTAR STRENGTH PREDICTOR")
 st.caption(" ")
 
 with st.form("prediction_form"):
