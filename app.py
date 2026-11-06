@@ -87,7 +87,7 @@ def enforce_shap_rules(raw_pred, inp, base):
 
     # 3. Susun Audit Arah Fitur Utama Sesuai Aturan SHAP Beeswarm Plot
     advisory_lines = [
-        f"[✓] SHAP COMPLIANCE VERIFIED ({regime_note})",
+        f"SHAP COMPLIANCE VERIFIED ({regime_note})",
         "-" * 68,
         f"1. WBR ({wbr:.2f}) [SHAP Wt: 4.84]            -> {'[+] Boost (Low WBR)' if wbr < base['WBR'] else '[-] Penalty (High WBR)'}",
         f"2. FA ({fa:.2f}) [SHAP Wt: 3.72]              -> {'[+] Boost (Low FA <= 0.10)' if fa <= base['FA'] else '[-] Penalty (High FA Dilution)'}",
@@ -199,22 +199,6 @@ if submitted:
         # 7. Tampilkan Hasil & Kotak Advisory SHAP
         st.divider()
         st.metric(
-            label="Predicted Strength",
-            value=f"{final_pred:.2f} MPa",
-            delta=f"{final_pred - raw_rf_pred:+.2f} MPa SHAP Calibration",
-        )
-
-        if is_critical:
-            st.error(
-                f"**Predicted Strength (RF + SHAP): {final_pred:.2f} MPa**  \n"
-                f"⚠️ `[SHAP Alert: Critical Stoichiometric Zone]`"
-            )
-        else:
-            st.success(
-                f"**Predicted Strength (RF + SHAP): {final_pred:.2f} MPa**  \n"
-                f"✅ `[Verified by SHAP Rules]`"
-            )
-
         st.markdown("**SHAP Rule Compliance & Feature Impact Audit:**")
         st.code(shap_advisory_text, language="text")
 
