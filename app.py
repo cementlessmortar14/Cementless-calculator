@@ -89,15 +89,15 @@ def enforce_shap_rules(raw_pred, inp, base):
     advisory_lines = [
         f"SHAP COMPLIANCE VERIFIED ({regime_note})",
         "-" * 68,
-        f"1. WBR ({wbr:.2f}) [SHAP Wt: 4.84]            -> {'[+] Boost (Low WBR)' if wbr < base['WBR'] else '[-] Penalty (High WBR)'}",
-        f"2. FA ({fa:.2f}) [SHAP Wt: 3.72]              -> {'[+] Boost (Low FA <= 0.10)' if fa <= base['FA'] else '[-] Penalty (High FA Dilution)'}",
+        f"1. WBR ({wbr:.2f}) [SHAP Wt: 4.84]             -> {'[+] Boost (Low WBR)' if wbr < base['WBR'] else '[-] Penalty (High WBR)'}",
+        f"2. FA ({fa:.2f}) [SHAP Wt: 3.72]               -> {'[+] Boost (Low FA <= 0.10)' if fa <= base['FA'] else '[-] Penalty (High FA Dilution)'}",
         f"3. Slag_Hyd_Idx ({slag_idx:.2f}) [SHAP Wt: 3.04] -> {'[+] Boost (Active Slag)' if slag_idx >= 20.0 else ('[-] Moderate Deficit' if slag_idx >= 10.0 else '[--] Severe Deficit Penalty')}",
-        f"4. Age ({age:.0f}d) [SHAP Wt: 1.66]            -> {'[+] Boost (Mature Curing)' if age >= base['Age'] else '[-] Penalty (Early Age)'}",
-        f"5. Al2O3 ({al2o3:.2f}%) [SHAP Wt: 1.63]         -> {'[+] Boost (Low Al2O3)' if al2o3 <= base['Al2O3'] else '[-] Penalty (High Al2O3)'}",
-        f"6. SP/WBR ({sp_wbr:.4f}) [SHAP Wt: 1.39]       -> {'[+] Positive Dispersion Boost' if sp_wbr > 0 else '[0] No SP Added (Baseline)'}",
-        f"7. CaO/Al2O3 ({cao_al2o3:.2f}) [SHAP Wt: 0.56]     -> {'[+] Boost (High Ratio)' if cao_al2o3 >= base['CaO/Al2O3'] else '[-] Penalty (Low Ratio)'}",
-        f"8. SO3/CaO ({so3_cao:.4f}) [SHAP Wt: 0.54]      -> {'[-] Penalty (Excess Sulfate > 0.11)' if so3_cao > 0.11 else '[+] Optimal Sulfate Balance'}",
-        f"9. Fiber ({fiber:.3f}) [SHAP Wt: 0.39]          -> {'[+] Positive Fiber Bridging' if fiber > 0 else '[0] No Fiber'}",
+        f"4. Age ({age:.0f}d) [SHAP Wt: 1.66]             -> {'[+] Boost (Mature Curing)' if age >= base['Age'] else '[-] Penalty (Early Age)'}",
+        f"5. Al2O3 ({al2o3:.2f}%) [SHAP Wt: 1.63]          -> {'[+] Boost (Low Al2O3)' if al2o3 <= base['Al2O3'] else '[-] Penalty (High Al2O3)'}",
+        f"6. SP/WBR ({sp_wbr:.4f}) [SHAP Wt: 1.39]        -> {'[+] Positive Dispersion Boost' if sp_wbr > 0 else '[0] No SP Added (Baseline)'}",
+        f"7. CaO/Al2O3 ({cao_al2o3:.2f}) [SHAP Wt: 0.56]      -> {'[+] Boost (High Ratio)' if cao_al2o3 >= base['CaO/Al2O3'] else '[-] Penalty (Low Ratio)'}",
+        f"8. SO3/CaO ({so3_cao:.4f}) [SHAP Wt: 0.54]       -> {'[-] Penalty (Excess Sulfate > 0.11)' if so3_cao > 0.11 else '[+] Optimal Sulfate Balance'}",
+        f"9. Fiber ({fiber:.3f}) [SHAP Wt: 0.39]           -> {'[+] Positive Fiber Bridging' if fiber > 0 else '[0] No Fiber'}",
         "-" * 68,
         f"RF Base Output: {raw_pred:.2f} MPa  |  SHAP-Guided Calibration: {final_pred - raw_pred:+.2f} MPa",
     ]
@@ -199,6 +199,9 @@ if submitted:
         # 7. Tampilkan Hasil & Kotak Advisory SHAP
         st.divider()
         st.metric(
+            label=" ",
+            value=f"{final_pred:.2f} MPa",
+        )
         st.markdown("**SHAP Rule Compliance & Feature Impact Audit:**")
         st.code(shap_advisory_text, language="text")
 
