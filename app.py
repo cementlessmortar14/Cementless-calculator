@@ -1,212 +1,247 @@
 import os
+import tkinter as tk
+from tkinter import messagebox
 import joblib
 import numpy as np
 import pandas as pd
-import streamlit as st
+import shap
 
-# --- Konfigurasi Halaman Streamlit ---
-st.set_page_config(
-    page_title="Mortar Strength Predictor",
-    layout="centered",
-)
-
-# Lokasi folder tempat menyimpan file .pkl (otomatis membaca direktori repositori GitHub)
-FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
-
-# Bobot Mean |SHAP| resmi sesuai grafik SHAP Feature Importance
-SHAP_WEIGHTS = {
-    "WBR": 4.84,
-    "FA": 3.72,
-    "Slag_Hydration_Index": 3.04,
-    "Age": 1.66,
-    "Al2O3": 1.63,
-    "SP/WBR": 1.39,
-    "CaO/Al2O3": 0.56,
-    "SO3/CaO": 0.54,
-    "Fiber": 0.39,
-}
+# Update to your artifact folder (defaults to current working directory)
+FOLDER_PATH = r"C:\Users\a0338\Desktop\ML-Mortar"
+ARTIFACT_FILE = os.path.join(FOLDER_PATH, "best_mortar_model.pkl")
 
 
-@st.cache_resource
-def load_artifacts(folder):
-    """Memuat model dan file pendukung sekali saja ke dalam cache memori."""
-    rf_path = os.path.join(folder, "best_rf_model.pkl")
-    fallback_path = os.path.join(folder, "best_xgb_model.pkl")
-    model_path = rf_path if os.path.exists(rf_path) else fallback_path
+def apply_domain_features(data: pd.DataFrame) -> pd.DataFrame:
+    """Identical deterministic feature engineering used during training."""
+    d = data.copy()
+    d["nBinder"] = d["GGBS"] + d["CFA"] + d["RUFA"] + d["SF"] + d["FA"]
+    d["nBinder"] = d["nBinder"].replace(0, np.nan)
 
-    loaded_model = joblib.load(model_path)
-    loaded_baseline = joblib.load(os.path.join(folder, "baseline_medians.pkl"))
-    loaded_features = joblib.load(os.path.join(folder, "feature_columns.pkl"))
-    return loaded_model, loaded_baseline, loaded_features
+    if "Water" in d.columns:
+        d["WBR"] = d["Water"] / d["nBinder"]
+    if "Aggregate" in d.columns:
+        d["ABR"] = d["Aggregate"] / d["nBinder"]
+
+    eps = 1e-5
+    d["SiO2/Al2O3"] = d["SiO2"] / (d["Al2O3"] + eps)
+    d["CaO/Al2O3"] = d["CaO"] / (d["Al2O3"] + eps)
+    d["CaO/SiO2"] = d["CaO"] / (d["SiO2"] + eps)
+    d["SO3/CaO"] = d["SO3"] / (d["CaO"] + eps)
+    d["SP/WBR"] = np.where(d["WBR"] > 0, d["SP"] / d["WBR"], np.nan)
+
+    d["GGBS_CFA_Synergy"] = d["GGBS"] * d["CFA"]
+    d["Slag_Hydration_Index"] = (d["GGBS"] * d["SiO2"]) / (d["WBR"] + eps)
+    d["GGBS_CFA_Balance"] = d["GGBS"] / (d["CFA"] + 0.1)
+
+    d = d.drop(columns=["Water", "FM"], errors="ignore")
+    return d
 
 
-def enforce_shap_rules(raw_pred, inp, base):
-    """
-    Menegakkan aturan arah & bobot SHAP secara ketat pada prediksi Random Forest
-    serta menghasilkan laporan audit kepatuhan SHAP (SHAP Advisory Log).
-    """
-    wbr       = inp["WBR"]
-    fa        = inp["FA"]
-    ggbs      = inp["GGBS"]
-    cfa       = inp["CFA"]
-    sp        = inp["SP"]
-    age       = inp["Age"]
-    al2o3     = inp["Al2O3"]
-    fiber     = inp["Fiber"]
-    sp_wbr    = inp["SP/WBR"]
-    slag_idx  = inp["Slag_Hydration_Index"]
-    cao_al2o3 = inp["CaO/Al2O3"]
-    so3_cao   = inp["SO3/CaO"]
+try:
+    bundle = joblib.load(ARTIFACT_FILE)
+    model_pipeline = bundle["model"]
+    model_name = bundle["model_name"]
+    feature_names = bundle["feature_columns"]
+    baseline = bundle["baseline_medians"]
+    training_bounds = bundle["training_bounds"]
+    shap_background = bundle["shap_background"]
+except FileNotFoundError as e:
+    root_err = tk.Tk()
+    root_err.withdraw()
+    messagebox.showerror(
+        "Artifact Not Found",
+        f"Run Cell 8 first to generate:\n{ARTIFACT_FILE}\n\nDetails:\n{e}",
+    )
+    raise SystemExit()
 
-    # 1. Koreksi Monotonik Mikro SP/WBR sesuai bobot SHAP (+1.39)
-    sp_shap_adj = (sp_wbr - 0.02) * (SHAP_WEIGHTS["SP/WBR"] * 25.0)
+# Build objective SHAP explainer once at startup
+if model_name in ("Random Forest", "XGBoost"):
+    explainer = shap.TreeExplainer(model_pipeline.named_steps["model"])
+else:
+    explainer = shap.Explainer(model_pipeline.predict, shap_background)
 
-    # 2. Penegakan Aturan Ketat SHAP untuk Interaksi Slag_Hydration_Index (+3.04), SO3/CaO (+0.54) & WBR (+4.84)
-    shap_rule_adj = 0.0
-    regime_note = "NORMAL (In-Distribution SHAP Regime)"
 
-    if slag_idx < 10.0 and so3_cao > 0.11:
-        if wbr <= 0.42 and sp < 0.015:
-            shap_rule_adj -= (SHAP_WEIGHTS["Slag_Hydration_Index"] * 3.8 + SHAP_WEIGHTS["SO3/CaO"] * 4.5)
-            regime_note = "CRITICAL: Low Slag_Hydration_Index + High SO3/CaO + Low WBR Compaction Loss"
-        elif wbr >= 0.58 and slag_idx <= 2.6:
-            shap_rule_adj -= (SHAP_WEIGHTS["Slag_Hydration_Index"] * 2.3 + SHAP_WEIGHTS["SO3/CaO"] * 2.5)
-            regime_note = "CRITICAL: Extreme Slag Deficit + High WBR Dilution Penalty"
-        elif 0.48 <= wbr <= 0.52:
-            shap_rule_adj += (sp - 0.01) * 180.0
-            regime_note = "WARNING: Low Slag_Hydration_Index (SP-Sensitive Regime)"
+def generate_objective_shap_report(df_input: pd.DataFrame, pred_value: float):
+    """Computes real-time local SHAP values and checks training-range extrapolation."""
+    sv = explainer(df_input)
+    base_val = float(np.asarray(sv.base_values).ravel()[0])
+    phi = np.asarray(sv.values).ravel()
+
+    # Check out-of-distribution inputs (purely informational; never modifies prediction)
+    ood_warnings = []
+    for col in feature_names:
+        val = float(df_input[col].iloc[0])
+        lo, hi = training_bounds[col]["min"], training_bounds[col]["max"]
+        if val < lo or val > hi:
+            ood_warnings.append(f"  ! {col} = {val:.4g} (training range: [{lo:.4g}, {hi:.4g}])")
+
+    # Sort features by absolute local SHAP contribution
+    ranked = sorted(
+        zip(feature_names, df_input.iloc[0].values, phi),
+        key=lambda x: abs(x[2]),
+        reverse=True,
+    )
+
+    lines = [
+        f"Model: {model_name} (Unmodified ML Prediction)",
+        f"SHAP Base Value E[f(x)] : {base_val:.2f} MPa",
+        f"Sum of Local SHAP (Σφ)  : {phi.sum():+.2f} MPa",
+        f"Final Prediction        : {pred_value:.2f} MPa",
+        "-" * 68,
+        "Top 10 Objective Local SHAP Feature Contributions:",
+    ]
+    for rank_i, (fname, fval, sval) in enumerate(ranked[:10], 1):
+        direction = "[+]" if sval >= 0 else "[-]"
+        lines.append(f"{rank_i:2d}. {fname:<22} ({fval:>7.3f}) -> {direction} {sval:+6.2f} MPa")
+
+    if ood_warnings:
+        lines.append("-" * 68)
+        lines.append("EXTRAPOLATION WARNING (Outside Training Domain — Interpret Carefully):")
+        lines.extend(ood_warnings[:6])
     else:
-        if wbr <= 0.42 and slag_idx >= 12.0:
-            shap_rule_adj += SHAP_WEIGHTS["WBR"] * 1.15
-            regime_note = "OPTIMAL: Low WBR Boost (+4.84) & Active Slag Synergy"
-        elif slag_idx >= 25.0 and 0.48 <= wbr <= 0.52:
-            shap_rule_adj += SHAP_WEIGHTS["Slag_Hydration_Index"] * 1.15
-            regime_note = "OPTIMAL: High Slag_Hydration_Index Boost (+3.04)"
+        lines.append("-" * 68)
+        lines.append("[✓] All input & engineered features lie within the training domain.")
 
-    final_pred = max(2.0, raw_pred + sp_shap_adj + shap_rule_adj)
+    return "\n".join(lines), bool(ood_warnings)
 
-    # 3. Susun Audit Arah Fitur Utama Sesuai Aturan SHAP Beeswarm Plot
-    advisory_lines = [
-        f"SHAP COMPLIANCE VERIFIED ({regime_note})",
-        "-" * 68,
-        f"1. WBR ({wbr:.2f}) [SHAP Wt: 4.84]             -> {'[+] Boost (Low WBR)' if wbr < base['WBR'] else '[-] Penalty (High WBR)'}",
-        f"2. FA ({fa:.2f}) [SHAP Wt: 3.72]               -> {'[+] Boost (Low FA <= 0.10)' if fa <= base['FA'] else '[-] Penalty (High FA Dilution)'}",
-        f"3. Slag_Hyd_Idx ({slag_idx:.2f}) [SHAP Wt: 3.04] -> {'[+] Boost (Active Slag)' if slag_idx >= 20.0 else ('[-] Moderate Deficit' if slag_idx >= 10.0 else '[--] Severe Deficit Penalty')}",
-        f"4. Age ({age:.0f}d) [SHAP Wt: 1.66]             -> {'[+] Boost (Mature Curing)' if age >= base['Age'] else '[-] Penalty (Early Age)'}",
-        f"5. Al2O3 ({al2o3:.2f}%) [SHAP Wt: 1.63]          -> {'[+] Boost (Low Al2O3)' if al2o3 <= base['Al2O3'] else '[-] Penalty (High Al2O3)'}",
-        f"6. SP/WBR ({sp_wbr:.4f}) [SHAP Wt: 1.39]        -> {'[+] Positive Dispersion Boost' if sp_wbr > 0 else '[0] No SP Added (Baseline)'}",
-        f"7. CaO/Al2O3 ({cao_al2o3:.2f}) [SHAP Wt: 0.56]      -> {'[+] Boost (High Ratio)' if cao_al2o3 >= base['CaO/Al2O3'] else '[-] Penalty (Low Ratio)'}",
-        f"8. SO3/CaO ({so3_cao:.4f}) [SHAP Wt: 0.54]       -> {'[-] Penalty (Excess Sulfate > 0.11)' if so3_cao > 0.11 else '[+] Optimal Sulfate Balance'}",
-        f"9. Fiber ({fiber:.3f}) [SHAP Wt: 0.39]           -> {'[+] Positive Fiber Bridging' if fiber > 0 else '[0] No Fiber'}",
-        "-" * 68,
-        f"RF Base Output: {raw_pred:.2f} MPa  |  SHAP-Guided Calibration: {final_pred - raw_pred:+.2f} MPa",
+
+def calculate_strength():
+    try:
+        raw_vals = {
+            "WBR": float(entries["WBR"].get()),
+            "GGBS": float(entries["GGBS"].get()),
+            "FA": float(entries["FA"].get()),
+            "CFA": float(entries["CFA"].get()),
+            "RUFA": float(entries["RUFA"].get()),
+            "SF": float(entries["SF"].get()),
+            "Aggregate": float(entries["Aggregate"].get()),
+            "Age": float(entries["Age"].get()),
+            "Al2O3": float(entries["Al2O3"].get()),
+            "SiO2": float(entries["SiO2"].get()),
+            "SO3": float(entries["SO3"].get()),
+            "CaO": float(entries["CaO"].get()),
+            "Fiber": float(entries["Fiber"].get()),
+            "SP": float(entries["SP"].get()),
+        }
+
+        # Convert oxide fractions (0-1) to wt% (0-100) only if all primary oxides are < 1
+        if raw_vals["Al2O3"] < 1.0 and raw_vals["SiO2"] < 1.0 and raw_vals["CaO"] < 1.0:
+            for ox in ("Al2O3", "SiO2", "SO3", "CaO"):
+                raw_vals[ox] *= 100.0
+
+        # Physical input validation
+        if raw_vals["WBR"] <= 0 or raw_vals["WBR"] >= 2.0:
+            raise ValueError("WBR must be strictly between 0 and 2.0.")
+        if raw_vals["Age"] <= 0:
+            raise ValueError("Age must be greater than 0 days.")
+        if any(v < 0 for v in raw_vals.values()):
+            raise ValueError("All mix proportions and oxide percentages must be non-negative.")
+
+        nbinder = raw_vals["GGBS"] + raw_vals["CFA"] + raw_vals["RUFA"] + raw_vals["SF"] + raw_vals["FA"]
+        if nbinder <= 0:
+            raise ValueError("Sum of binder components (GGBS+CFA+RUFA+SF+FA) must be > 0.")
+
+        df_input = apply_domain_features(pd.DataFrame([raw_vals]))[feature_names]
+
+        # Pure, unmodified model prediction
+        pred_mpa = float(model_pipeline.predict(df_input)[0])
+        report_text, is_ood = generate_objective_shap_report(df_input, pred_mpa)
+
+        if is_ood:
+            label_result.config(
+                text=f"Predicted Strength ({model_name}): {pred_mpa:.2f} MPa\n[Warning: Input Outside Training Range]",
+                fg="#d9534f",
+            )
+        else:
+            label_result.config(
+                text=f"Predicted Strength ({model_name}): {pred_mpa:.2f} MPa\n[✓ In-Distribution Prediction]",
+                fg="#1b7837",
+            )
+
+        text_advisory.config(state="normal")
+        text_advisory.delete("1.0", tk.END)
+        text_advisory.insert(tk.END, report_text)
+        text_advisory.config(state="disabled")
+
+    except ValueError as err:
+        messagebox.showerror("Input Error", f"Invalid input:\n{err}")
+    except KeyError as err:
+        messagebox.showerror(
+            "Feature Mismatch",
+            f"Missing feature {err}. Re-run Cell 8 to regenerate best_mortar_model.pkl.",
+        )
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title(f"Mortar Strength Predictor — Objective {model_name} + Real-Time SHAP")
+    root.geometry("580x820")
+    root.resizable(False, False)
+
+    input_fields = [
+        ("WBR (Water/Binder):", "WBR", round(baseline["WBR"], 3)),
+        ("GGBS (fraction):", "GGBS", round(baseline["GGBS"], 3)),
+        ("CFA (fraction):", "CFA", round(baseline["CFA"], 3)),
+        ("FA (fraction):", "FA", round(baseline["FA"], 3)),
+        ("RUFA (fraction):", "RUFA", round(baseline["RUFA"], 3)),
+        ("SF (fraction):", "SF", round(baseline["SF"], 3)),
+        ("Aggregate ratio:", "Aggregate", round(baseline["Aggregate"], 3)),
+        ("Age (days):", "Age", int(round(baseline["Age"]))),
+        ("Al2O3 (%):", "Al2O3", round(baseline["Al2O3"], 2)),
+        ("SiO2 (%):", "SiO2", round(baseline["SiO2"], 2)),
+        ("SO3 (%):", "SO3", round(baseline["SO3"], 2)),
+        ("CaO (%):", "CaO", round(baseline["CaO"], 2)),
+        ("Fiber:", "Fiber", round(baseline["Fiber"], 4)),
+        ("Superplasticizer (SP):", "SP", round(baseline["SP"], 4)),
     ]
 
-    return final_pred, "\n".join(advisory_lines), (slag_idx < 10.0 and so3_cao > 0.11)
+    entries = {}
+    for i, (lbl_text, key, default_val) in enumerate(input_fields):
+        tk.Label(root, text=lbl_text, anchor="w", font=("Arial", 9)).grid(
+            row=i, column=0, padx=18, pady=3, sticky="w"
+        )
+        ent = tk.Entry(root, width=22, font=("Arial", 9))
+        ent.insert(0, str(default_val))
+        ent.grid(row=i, column=1, padx=18, pady=3, sticky="e")
+        entries[key] = ent
 
+    tk.Button(
+        root,
+        text="Predict Strength & Compute Local SHAP",
+        command=calculate_strength,
+        bg="#007acc",
+        fg="white",
+        font=("Arial", 10, "bold"),
+        padx=12,
+        pady=5,
+    ).grid(row=len(input_fields), column=0, columnspan=2, pady=10)
 
-# --- Muat File .pkl ---
-try:
-    model, baseline, feature_names = load_artifacts(FOLDER_PATH)
-except FileNotFoundError as e:
-    st.error(
-        f"**File Tidak Ditemukan!**\n\n"
-        f"Pastikan file `.pkl` sudah di-upload ke repositori GitHub yang sama dengan `app.py`.\n\n"
-        f"**Detail error:** `{e}`"
+    label_result = tk.Label(
+        root,
+        text="Predicted Strength: -- MPa",
+        font=("Arial", 11, "bold"),
+        justify="center",
     )
-    st.stop()
+    label_result.grid(row=len(input_fields) + 1, column=0, columnspan=2, pady=4)
 
-# --- Antarmuka Utama (UI) ---
-st.title("CEMENTLESS MORTAR STRENGTH PREDICTOR")
-st.caption(" ")
+    tk.Label(
+        root,
+        text="Real-Time Objective SHAP Breakdown:",
+        font=("Arial", 9, "bold"),
+        anchor="w",
+    ).grid(row=len(input_fields) + 2, column=0, columnspan=2, padx=18, pady=(6, 2), sticky="w")
 
-with st.form("prediction_form"):
-    st.subheader("Mix Proportions & Oxide Composition")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        ggbs  = st.number_input("GGBS (fraction by total binders (0-1)):", value=0.60, step=0.05, format="%.2f")
-        fa    = st.number_input("Fly Ash - FA (fraction by total binders (0-1)):", value=0.10, step=0.05, format="%.2f")
-        cfa   = st.number_input("Co-fired FA - CFA (fraction by total binders (0-1)):", value=0.30, step=0.05, format="%.2f")
-        sf    = st.number_input("Silica Fume - SF (fraction by total binders (0-1)):", value=0.00, step=0.01, format="%.2f")
-        wbr   = st.number_input("WBR - w/b (ratio by total binders (0-1)):", value=0.50, step=0.01, format="%.2f")
-        age   = st.number_input("Age (Days):", value=28.0, step=1.0, format="%.0f")
-
-    with col2:
-        fiber = st.number_input("Fiber (ratio by total binders (0-1)):", value=0.000, step=0.005, format="%.3f")
-        sp    = st.number_input("Superplasticizer - SP (ratio by total binders (0-1)):", value=0.010, step=0.005, format="%.3f")
-        al2o3 = st.number_input("Al2O3 (%):", value=18.09, step=0.10, format="%.2f")
-        so3   = st.number_input("SO3 (%):", value=3.74, step=0.10, format="%.2f")
-        sio2  = st.number_input("SiO2 (%):", value=23.77, step=0.10, format="%.2f")
-        cao   = st.number_input("CaO (%):", value=45.74, step=0.10, format="%.2f")
-
-    submitted = st.form_submit_button(
-        "Calculate Strength",
-        type="primary",
-        use_container_width=True,
+    text_advisory = tk.Text(
+        root,
+        width=72,
+        height=18,
+        font=("Consolas", 8),
+        bg="#f8f9fa",
+        fg="#212529",
+        relief="solid",
+        bd=1,
+        state="disabled",
     )
+    text_advisory.grid(row=len(input_fields) + 3, column=0, columnspan=2, padx=18, pady=4)
 
-# --- Eksekusi Perhitungan ---
-if submitted:
-    try:
-        # 1. Proteksi otomatis jika user memasukkan oksida dalam desimal (misal 0.12 bukan 12%)
-        if al2o3 < 1.0 and sio2 < 1.0 and cao < 1.0:
-            al2o3, sio2, so3, cao = al2o3 * 100.0, sio2 * 100.0, so3 * 100.0, cao * 100.0
-            st.info("Catatan: Nilai oksida terdeteksi dalam format desimal dan telah dikonversi otomatis ke persen (%).")
-
-        # 2. Siapkan dictionary data input dimulai dari baseline median
-        input_data = baseline.copy()
-
-        # 3. Masukkan seluruh input utama ke input_data
-        input_data["WBR"]   = float(wbr)
-        input_data["GGBS"]  = float(ggbs)
-        input_data["FA"]    = float(fa)
-        input_data["CFA"]   = float(cfa)
-        input_data["SF"]    = float(sf)
-        input_data["Age"]   = float(age)
-        input_data["Al2O3"] = float(al2o3)
-        input_data["Fiber"] = float(fiber)
-        input_data["SP"]    = float(sp)
-        input_data["SiO2"]  = float(sio2)
-        input_data["SO3"]   = float(so3)
-        input_data["CaO"]   = float(cao)
-
-        rufa = input_data.get("RUFA", 0.0)
-        nbinder = ggbs + cfa + rufa + sf + fa
-        input_data["nBinder"] = nbinder if nbinder != 0 else 1.0
-        input_data["ABR"] = input_data.get("Aggregate", 1.0) / input_data["nBinder"]
-
-        # 4. Hitung rasio oksida & fitur domain sesuai nama di feature_columns.pkl
-        input_data["SiO2/Al2O3"] = sio2 / (al2o3 + 1e-5)
-        input_data["CaO/Al2O3"]  = cao / (al2o3 + 1e-5)
-        input_data["CaO/SiO2"]   = cao / (sio2 + 1e-5)
-        input_data["SO3/CaO"]    = so3 / (cao + 1e-5)
-        input_data["SP/WBR"]     = sp / wbr if wbr != 0 else 0.0
-
-        input_data["GGBS_CFA_Synergy"]     = ggbs * cfa
-        input_data["Slag_Hydration_Index"] = (ggbs * sio2) / (wbr + 1e-5)
-        input_data["GGBS_CFA_Balance"]     = ggbs / (cfa + 0.1)
-
-        # 5. Konversi ke DataFrame sesuai urutan kolom training
-        df_input = pd.DataFrame([input_data])[feature_names]
-
-        # 6. Prediksi RF & terapkan aturan ketat SHAP
-        raw_rf_pred = float(model.predict(df_input)[0])
-        final_pred, shap_advisory_text, is_critical = enforce_shap_rules(
-            raw_rf_pred, input_data, baseline
-        )
-
-        # 7. Tampilkan Hasil & Kotak Advisory SHAP
-        st.divider()
-        st.metric(
-            label=" ",
-            value=f"{final_pred:.2f} MPa",
-        )
-        st.markdown("**SHAP Rule Compliance & Feature Impact Audit:**")
-        st.code(shap_advisory_text, language="text")
-
-    except KeyError as e:
-        st.error(
-            f"**Feature Error:** Nama fitur `{e}` tidak cocok dengan yang ada di `feature_columns.pkl`!\n"
-            f"Jalankan ulang Cell 12 dan Cell 18 terlebih dahulu."
-        )
+    root.mainloop()
