@@ -127,7 +127,7 @@ except FileNotFoundError as e:
     st.error(f"Artifact Not Found:\n{ARTIFACT_FILE}\n\nDetails:\n{e}")
     st.stop()
 
-st.title(f"Mortar Strength Predictor - Objective {model_name} + Real-Time SHAP")
+st.title(f"Cementless Mortar Strength Predictor")
 
 input_fields = [
     ("WBR (Water/Binder):", "WBR", float(round(baseline["WBR"], 3)), "%.3f"),
