@@ -1,6 +1,4 @@
-import io
-import urllib.request
-from pathlib import Path
+import os
 
 import joblib
 import numpy as np
@@ -8,11 +6,9 @@ import pandas as pd
 import shap
 import streamlit as st
 
-GITHUB_RAW_URLS = [
-    "https://raw.githubusercontent.com/cementlessmortar14/Cementless-calculator/main/best_mortar_model.pkl",
-    "https://raw.githubusercontent.com/cementlessmortar14/Cementless-calculator/master/best_mortar_model.pkl",
-]
-ARTIFACT_FILE = Path(__file__).resolve().parent / "best_mortar_model.pkl"
+st.set_page_config(page_title="Mortar Strength Predictor")
+
+ARTIFACT_FILE = os.path.join(os.path.dirname(__file__), "best_mortar_model.pkl")
 
 
 def apply_domain_features(data: pd.DataFrame) -> pd.DataFrame:
@@ -43,23 +39,7 @@ def apply_domain_features(data: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_resource
 def load_artifacts():
-    bundle = None
-    if ARTIFACT_FILE.exists():
-        bundle = joblib.load(ARTIFACT_FILE)
-    else:
-        last_err = None
-        for url in GITHUB_RAW_URLS:
-            try:
-                with urllib.request.urlopen(url, timeout=30) as resp:
-                    bundle = joblib.load(io.BytesIO(resp.read()))
-                break
-            except Exception as err:
-                last_err = err
-        if bundle is None:
-            raise FileNotFoundError(
-                f"Could not find {ARTIFACT_FILE} locally or on GitHub. Details: {last_err}"
-            )
-
+    bundle = joblib.load(ARTIFACT_FILE)
     model_pipeline = bundle["model"]
     model_name = bundle["model_name"]
     feature_names = bundle["feature_columns"]
@@ -113,7 +93,7 @@ def generate_objective_shap_report(
     lines = [
         f"Model: {model_name} (Unmodified ML Prediction)",
         f"SHAP Base Value E[f(x)] : {base_val:.2f} MPa",
-        f"Sum of Local SHAP (Σφ)  : {phi.sum():+.2f} MPa",
+        f"Sum of Local SHAP       : {phi.sum():+.2f} MPa",
         f"Final Prediction        : {pred_value:.2f} MPa",
         "-" * 68,
         "Top 10 Objective Local SHAP Feature Contributions:",
@@ -124,13 +104,12 @@ def generate_objective_shap_report(
             f"{rank_i:2d}. {fname:<22} ({fval:>7.3f}) -> {direction} {sval:+6.2f} MPa"
         )
 
+    lines.append("-" * 68)
     if ood_warnings:
-        lines.append("-" * 68)
-        lines.append("EXTRAPOLATION WARNING (Outside Training Domain — Interpret Carefully):")
+        lines.append("EXTRAPOLATION WARNING (Outside Training Domain - Interpret Carefully):")
         lines.extend(ood_warnings[:6])
     else:
-        lines.append("-" * 68)
-        lines.append("[✓] All input & engineered features lie within the training domain.")
+        lines.append("[OK] All input & engineered features lie within the training domain.")
 
     return "\n".join(lines), bool(ood_warnings)
 
@@ -145,10 +124,58 @@ try:
         explainer,
     ) = load_artifacts()
 except FileNotFoundError as e:
-    st.error(f"Artifact Not Found:\n\n{e}")
+    st.error(f"Artifact Not Found:\n{ARTIFACT_FILE}\n\nDetails:\n{e}")
     st.stop()
 
-st.set_page_config(
-    page_title=f"Mortar Strength Predictor — Objective {model_name} + Real-Time SHAP"
-)
-st.title(f"Mort
+st.title(f"Mortar Strength Predictor - Objective {model_name} + Real-Time SHAP")
+
+input_fields = [
+    ("WBR (Water/Binder):", "WBR", float(round(baseline["WBR"], 3)), "%.3f"),
+    ("GGBS (fraction):", "GGBS", float(round(baseline["GGBS"], 3)), "%.3f"),
+    ("CFA (fraction):", "CFA", float(round(baseline["CFA"], 3)), "%.3f"),
+    ("FA (fraction):", "FA", float(round(baseline["FA"], 3)), "%.3f"),
+    ("RUFA (fraction):", "RUFA", float(round(baseline["RUFA"], 3)), "%.3f"),
+    ("SF (fraction):", "SF", float(round(baseline["SF"], 3)), "%.3f"),
+    ("Aggregate ratio:", "Aggregate", float(round(baseline["Aggregate"], 3)), "%.3f"),
+    ("Age (days):", "Age", float(int(round(baseline["Age"]))), "%.1f"),
+    ("Al2O3 (%):", "Al2O3", float(round(baseline["Al2O3"], 2)), "%.2f"),
+    ("SiO2 (%):", "SiO2", float(round(baseline["SiO2"], 2)), "%.2f"),
+    ("SO3 (%):", "SO3", float(round(baseline["SO3"], 2)), "%.2f"),
+    ("CaO (%):", "CaO", float(round(baseline["CaO"], 2)), "%.2f"),
+    ("Fiber:", "Fiber", float(round(baseline["Fiber"], 4)), "%.4f"),
+    ("Superplasticizer (SP):", "SP", float(round(baseline["SP"], 4)), "%.4f"),
+]
+
+with st.form("predictor_form"):
+    raw_vals = {}
+    col1, col2 = st.columns(2)
+    for i, (lbl_text, key, default_val, fmt) in enumerate(input_fields):
+        target_col = col1 if i < 7 else col2
+        raw_vals[key] = target_col.number_input(lbl_text, value=default_val, format=fmt)
+
+    submitted = st.form_submit_button("Predict Strength & Compute Local SHAP")
+
+if submitted:
+    try:
+        # Convert oxide fractions (0-1) to wt% (0-100) only if all primary oxides are < 1
+        if raw_vals["Al2O3"] < 1.0 and raw_vals["SiO2"] < 1.0 and raw_vals["CaO"] < 1.0:
+            for ox in ("Al2O3", "SiO2", "SO3", "CaO"):
+                raw_vals[ox] *= 100.0
+
+        # Physical input validation
+        if raw_vals["WBR"] <= 0 or raw_vals["WBR"] >= 2.0:
+            raise ValueError("WBR must be strictly between 0 and 2.0.")
+        if raw_vals["Age"] <= 0:
+            raise ValueError("Age must be greater than 0 days.")
+        if any(v < 0 for v in raw_vals.values()):
+            raise ValueError("All mix proportions and oxide percentages must be non-negative.")
+
+        nbinder = (
+            raw_vals["GGBS"]
+            + raw_vals["CFA"]
+            + raw_vals["RUFA"]
+            + raw_vals["SF"]
+            + raw_vals["FA"]
+        )
+        if nbinder <= 0:
+            raise ValueError("Sum
