@@ -178,4 +178,37 @@ if submitted:
             + raw_vals["FA"]
         )
         if nbinder <= 0:
-            raise ValueError("Sum
+            raise ValueError("Sum of binder components (GGBS+CFA+RUFA+SF+FA) must be > 0.")
+
+        df_input = apply_domain_features(pd.DataFrame([raw_vals]))[feature_names]
+
+        pred_mpa = float(model_pipeline.predict(df_input)[0])
+        report_text, is_ood = generate_objective_shap_report(
+            explainer,
+            model_name,
+            feature_names,
+            training_bounds,
+            df_input,
+            pred_mpa,
+        )
+
+        if is_ood:
+            st.error(
+                f"Predicted Strength ({model_name}): {pred_mpa:.2f} MPa\n\n"
+                "[Warning: Input Outside Training Range]"
+            )
+        else:
+            st.success(
+                f"Predicted Strength ({model_name}): {pred_mpa:.2f} MPa\n\n"
+                "[OK: In-Distribution Prediction]"
+            )
+
+        st.subheader("Real-Time Objective SHAP Breakdown:")
+        st.code(report_text, language="text")
+
+    except ValueError as err:
+        st.error(f"Invalid input:\n{err}")
+    except KeyError as err:
+        st.error(
+            f"Missing feature {err}. Re-run Cell 8 to regenerate best_mortar_model.pkl."
+        )
