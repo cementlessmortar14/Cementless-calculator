@@ -362,20 +362,6 @@ if submitted:
             bar_cls = "shap-pos" if sval >= 0 else "shap-neg"
             val_color = "#10b981" if sval >= 0 else "#ef4444"
             bars.append(
-                f"""
-                <div class="shap-row">
-                    <div class="shap-meta">
-                        <div>
-                            <span class="shap-name">{fname}</span>
-                            <span class="shap-fval">({fval:.3f})</span>
-                        </div>
-                        <span style="font-weight: 600; color: {val_color};">{sval:+.2f} MPa</span>
-                    </div>
-                    <div class="shap-track">
-                        <div class="{bar_cls}" style="width: {pct:.1f}%;"></div>
-                    </div>
-                </div>
-                """
             )
         st.markdown(f'<div class="shap-card">{"".join(bars)}</div>', unsafe_allow_html=True)
 
